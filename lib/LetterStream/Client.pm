@@ -9,9 +9,10 @@ use JSON::MaybeXS;
 use Carp qw(croak);
 use File::Basename;
 use LWP::UserAgent;
-use Digest::MD5 qw(md5);
+use List::Util qw(uniq);
 use Text::CSV_XS qw(csv);
 use File::Temp qw(tempfile);
+use Digest::MD5 qw(md5_hex);
 use HTTP::Request::Common qw(POST);
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 use IO::Async::Timer::Periodic;
@@ -40,9 +41,11 @@ sub new {
         croak "Invalid \$mode->{value}."
       }
 
-      foreach my $cb (qw(success_cb error_cb)) {
-        croak "Missing queue $cb." unless $$args{$cb};
-        croak "Invalid queue $cb." unless ref $$args{$cb} eq 'CODE'
+      if($$args{mode}->{send_on} eq 'interval') {
+        foreach my $cb (qw(success_cb error_cb)) {
+          croak "Missing queue $cb." unless $$args{$cb};
+          croak "Invalid queue $cb." unless ref $$args{$cb} eq 'CODE'
+        }
       }
     }
     elsif($$args{mode}->{send_on} ne 'letter_created') {
@@ -99,10 +102,10 @@ sub add_to_queue {
 
   push @{ $self->{letter_queue} }, $letter;
 
-  if($self->{args}->{send_on} eq 'letter_created') {
+  if($self->{args}->{mode}->{send_on} eq 'letter_created') {
     return $self->send_queue();
   }
-  elsif($self->{args}->{send_on} eq 'interval') {
+  elsif($self->{args}->{mode}->{send_on} eq 'interval') {
     $self->{timer}->start;
     $self->{loop}->add($self->{timer});
     $self->{loop}->run
@@ -143,7 +146,7 @@ sub send_queue {
     croak "Error writing temporary zip file."
   }
 
-  my $req = POST 'http://www.perl.org/survey.cgi',
+  my $req = POST $api_base_uri,
     Content_Type => 'form-data',
     Content => [
       multi_file => [ $zip_fn ],
@@ -157,13 +160,12 @@ sub get_auth_fields {
   my ($self) = @_;
 
   my $uniqid = time() . sprintf("%03d", int(rand(1000)));
-  my $hash = md5(encode_base64(substr($uniqid, -6) . $self->{api_key} . substr($uniqid, 0, 6)));
+  my $hash = md5_hex(encode_base64(substr($uniqid, -6) . $self->{args}->{api_key} . substr($uniqid, 0, 6)));
 
   my $fields = {
-    a => $self->{api_id},
+    a => $self->{args}->{api_id},
     h => $hash,
     u => $uniqid,
-    d => $self->{args}->{debug},
     responseformat => 'json'
   };
 

@@ -1,5 +1,6 @@
 requires 'Carp';
 requires 'File::Temp';
+requires 'List::Util';
 requires 'Digest::MD5';
 requires 'URI::Escape';
 requires 'MIME::Base64';
