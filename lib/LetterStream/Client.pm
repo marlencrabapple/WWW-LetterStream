@@ -24,8 +24,6 @@ sub new {
 
   croak "Missing API ID." unless $$args{api_id};
   croak "Missing API key." unless $$args{api_key};
-  croak "Missing logger." unless $$args{logger};
-  croak "Invalid logger." unless ref $$args{logger} eq 'CODE';
 
   croak "Invalid debug value."
     if($$args{debug} && $$args{debug} !~ /^1|2|3$/);
@@ -40,6 +38,11 @@ sub new {
       }
       elsif($$args{mode}->{value} !~ /^[0-9]+$/) {
         croak "Invalid \$mode->{value}."
+      }
+
+      foreach my $cb (qw(success_cb error_cb)) {
+        croak "Missing queue $cb." unless $$args{$cb};
+        croak "Invalid queue $cb." unless ref $$args{$cb} eq 'CODE'
       }
     }
     elsif($$args{mode}->{send_on} ne 'letter_created') {
@@ -175,10 +178,14 @@ sub send_request {
   my $res = $self->{ua}->request($req);
 
   if($res->is_success) {
-    return decode_json($res->decoded_content), $res
+    return $self->{args}->{mode}->{send_on} eq 'letter_created'
+      ? (decode_json($res->decoded_content), $res)
+      : $self->{success_cb}->(decode_json($res->decoded_content), $res)
   }
 
-  croak $res->decoded_content
+  return $self->{args}->{mode}->{send_on} eq 'letter_created'
+    ? croak $res->decoded_content
+    : $self->{error_cb}->($res->decoded_content)
 }
 
 1;
