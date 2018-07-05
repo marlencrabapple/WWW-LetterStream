@@ -79,7 +79,7 @@ sub new {
 sub create_letter {
   my ($self, $content) = @_;
 
-  foreach my $key (qw(MailType Duplex Ink Affidavit PageCount PDFFileName)) {
+  foreach my $key (qw(MailType PageCount PDFFileName)) {
     croak "No '$key' provided." unless $$content{$key}
   }
 
