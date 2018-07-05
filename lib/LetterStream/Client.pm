@@ -3,18 +3,21 @@ package LetterStream::Client;
 use strict;
 use warnings;
 
-use Digest::MD5;
 use URI::Escape;
-use Archive::Zip;
-use Text::CSV_XS;
+use MIME::Base64;
 use JSON::MaybeXS;
 use Carp qw(croak);
+use File::Basename;
 use LWP::UserAgent;
+use Digest::MD5 qw(md5);
+use Text::CSV_XS qw(csv);
+use File::Temp qw(tempfile);
 use HTTP::Request::Common qw(POST);
+use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 use IO::Async::Timer::Periodic;
 use IO::Async::Loop;
 
-our $api_base_uri = 'https://print.directmailers.com/api/v1';
+our $api_base_uri = 'https://secure.letterstream.com/apis/index.php';
 
 sub new {
   my ($class, $args) = @_;
@@ -24,19 +27,22 @@ sub new {
   croak "Missing logger." unless $$args{logger};
   croak "Invalid logger." unless ref $$args{logger} eq 'CODE';
 
+  croak "Invalid debug value."
+    if($$args{debug} && $$args{debug} !~ /^1|2|3$/);
+
   if(ref $$args{mode} eq 'HASH') {
-    if(!$$mode{send_on}) {
+    if(!$$args{mode}->{send_on}) {
       croak "Missing \$mode->{send_on}."
     }
-    if($$mode{send_on} =~ /filesize_limit|filecount_limit|inverval/) {
-      if(!$$mode{value}) {
+    if($$args{mode}->{send_on} =~ /filesize_limit|filecount_limit|interval/) {
+      if(!$$args{mode}->{value}) {
         croak "Missing \$mode->{value}."
       }
-      elsif($$mode{value} !~ /^[0-9]+$/) {
+      elsif($$args{mode}->{value} !~ /^[0-9]+$/) {
         croak "Invalid \$mode->{value}."
       }
     }
-    elsif($$mode{send_on} ne 'letter_created') {
+    elsif($$args{mode}->{send_on} ne 'letter_created') {
       croak "Invalid \$mode->{send_on}."
     }
   }
@@ -50,6 +56,7 @@ sub new {
 
   $$self{args} = { %$args };
   $$self{letter_queue} = [];
+  $$self{queue_filesize} = 0;
   $$self{ua} = LWP::UserAgent->new;
 
   if($$args{mode}->{send_on} eq 'interval') {
@@ -69,24 +76,17 @@ sub new {
 sub create_letter {
   my ($self, $content) = @_;
 
-  foreach my $key (qw(Description Size PostalClass Data)) {
+  foreach my $key (qw(MailType Duplex Ink Affidavit PageCount PDFFileName)) {
     croak "No '$key' provided." unless $$content{$key}
   }
 
-  foreach my $key (qw(To From)) {
-    if(ref $$content{$key} eq 'HASH') {
-      foreach my $address_key (qw(Name AddressLine1 AddressLine2 City Zip)) {
-        croak "No '$key->{$address_key}' provided." unless $$content{$key}->{$address_key}
-      }
-    }
-    else {
-      croak "No '$key' provided."
+  foreach my $address_type (qw(Recipient Sender)) {
+    foreach my $address_key (qw(Name Addr1 City State Zip)) {
+      croak "No '$address_type$address_key' provided." unless $$content{$address_type . $address_key}
     }
   }
 
-  #my $req = POST "$api_base_uri/letter/", Content => encode_json($content);
-
-  #return $self->send_request($req)
+  $$content{UniqueDocId} = time() . sprintf("%03d", int(rand(1000)));
 
   return $self->add_to_queue($content)
 }
@@ -105,32 +105,72 @@ sub add_to_queue {
     $self->{loop}->run
   }
   elsif($self->{args}->{mode}->{send_on} eq 'filecount_limit') {
-    ...
+    $self->send_queue() if scalar @{ $self->{letter_queue} } >= $self->{args}->{mode}->{value}
   }
   elsif($self->{args}->{mode}->{send_on} eq 'filesize_limit') {
-    ...
+    $self->{queue_filesize} += -s $$letter{PDFFileName};
+    $self->send_queue() if $self->{queue_filesize} > $self->{args}->{mode}->{value};
   }
 }
 
 sub send_queue {
   my ($self) = @_;
 
+  my ($csv_fh, $csv_fn) = tempfile();
+  my ($zip_fh, $zip_fn) = tempfile();
+
   my @queue = @{ $self->{letter_queue} };
   $self->{letter_queue} = [];
 
-  foreach my $letter (@queue) {
-    
+  csv(in => \@queue, out => $csv_fn);
+
+  my @pdfs = uniq(map {
+    $$_{PDFFileName}
+  } @queue);
+
+  my $zip = Archive::Zip->new();
+
+  $zip->addFile($csv_fn, basename($csv_fn));
+
+  foreach my $pdf (@pdfs) {
+    $zip->addFile($pdf, basename($pdf))
   }
 
-  # Create CSV
-  # Zip it
-  # Send
+  unless ($zip->writeToFileNamed($zip_fn) == AZ_OK) {
+    croak "Error writing temporary zip file."
+  }
+
+  my $req = POST 'http://www.perl.org/survey.cgi',
+    Content_Type => 'form-data',
+    Content => [
+      multi_file => [ $zip_fn ],
+      %{ $self->get_auth_fields() }
+    ];
+
+  return $self->send_request($req)
+}
+
+sub get_auth_fields {
+  my ($self) = @_;
+
+  my $uniqid = time() . sprintf("%03d", int(rand(1000)));
+  my $hash = md5(encode_base64(substr($uniqid, -6) . $self->{api_key} . substr($uniqid, 0, 6)));
+
+  my $fields = {
+    a => $self->{api_id},
+    h => $hash,
+    u => $uniqid,
+    d => $self->{args}->{debug},
+    responseformat => 'json'
+  };
+
+  $$fields{debug} = $self->{args}->{debug} if $self->{args}->{debug};
+
+  return $fields
 }
 
 sub send_request {
   my ($self, $req, $args) = @_;
-
-  $req->authorization_basic($$self{attribs}->{api_user}, $$self{attribs}->{api_pass});
 
   my $res = $self->{ua}->request($req);
 
