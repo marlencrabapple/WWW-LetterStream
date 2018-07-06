@@ -3,6 +3,7 @@ package LetterStream::Client;
 use strict;
 use warnings;
 
+use DBI;
 use URI::Escape;
 use MIME::Base64;
 use JSON::MaybeXS;
@@ -23,6 +24,8 @@ our $api_base_uri = 'https://secure.letterstream.com/apis/index.php';
 sub new {
   my ($class, $args) = @_;
 
+  my $attribs = {};
+
   croak "Missing API ID." unless $$args{api_id};
   croak "Missing API key." unless $$args{api_key};
 
@@ -39,6 +42,18 @@ sub new {
       }
       elsif($$args{mode}->{value} !~ /^[0-9]+$/) {
         croak "Invalid \$mode->{value}."
+      }
+
+      if(ref $$args{queue} eq 'HASH') {
+        croak "No \$queue->{table} provided." unless $$args{queue}->{table};
+        croak "No \$queue->{source} provided." unless ref $$args{queue}->{source} eq 'ARRAY';
+
+        $$attribs{dbh} = DBI->connect(@{ $$args{queue}->{source} });
+
+        init_queue($$attribs{dbh}, $$args{queue}->{table})
+      }
+      else {
+        croak "Missing queue options."
       }
 
       if($$args{mode}->{send_on} eq 'interval') {
@@ -58,7 +73,7 @@ sub new {
     }
   }
 
-  my $self = bless {}, $class;
+  my $self = bless $attribs, $class;
 
   $$self{args} = { %$args };
   $$self{letter_queue} = [];
@@ -192,7 +207,7 @@ sub get_auth_fields {
   my $uniqid = time() . sprintf("%03d", int(rand(1000)));
 
   my $base64 = encode_base64(substr($uniqid, -6) . $self->{args}->{api_key} . substr($uniqid, 0, 6));
-  chop($base64);
+  chomp($base64);
 
   my $md5 = md5_hex($base64);
 
@@ -222,6 +237,37 @@ sub send_request {
   return $self->{args}->{mode}->{send_on} eq 'letter_created'
     ? croak $res->decoded_content
     : $self->{error_cb}->($res->decoded_content)
+}
+
+sub table_exists {
+  my ($dbh, $table) = @_;
+
+  my $sth;
+
+  return 0 unless $sth = $self->dbh->prepare("SELECT * FROM " . $table . " LIMIT 1;");
+  return 0 unless $sth->execute();
+
+  return 1
+}
+
+sub get_sql_autoincrement {
+  my $source = shift;
+
+	return 'INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT' if $source =~ /^DBI:mysql:/i;
+	return 'INTEGER PRIMARY KEY' if $source =~ /^DBI:SQLite:/i;
+	return 'INTEGER PRIMARY KEY' if $source =~ /^DBI:SQLite2:/i;
+
+  croak "Invalid \$queue->{source}"
+}
+
+sub init_queue {
+  my ($dbh, $table) = @_;
+
+  if(!table_exists($table)) {
+    my $sth = $dbh->prepare(qq/CREATE TABLE $table (
+      
+      )/)
+  }
 }
 
 1

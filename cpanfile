@@ -1,3 +1,4 @@
+requires 'DBI';
 requires 'Carp';
 requires 'File::Temp';
 requires 'List::Util';
