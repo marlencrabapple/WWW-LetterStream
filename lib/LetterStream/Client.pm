@@ -87,12 +87,14 @@ sub create_letter {
   }
 
   foreach my $address_type (qw(Recipient Sender)) {
-    foreach my $address_key (qw(Name Addr1 City State Zip)) {
+    foreach my $address_key (qw(Name1 Addr1 City State Zip)) {
       croak "No '$address_type$address_key' provided." unless $$content{$address_type . $address_key}
     }
   }
 
   $$content{UniqueDocId} = time() . sprintf("%03d", int(rand(1000)));
+  $$content{path_to_pdf} = $$content{PDFFileName};
+  $$content{PDFFileName} = basename($$content{PDFFileName});
 
   return $self->add_to_queue($content)
 }
@@ -128,15 +130,43 @@ sub send_queue {
   my @queue = @{ $self->{letter_queue} };
   $self->{letter_queue} = [];
 
-  csv(in => \@queue, out => $csv_fn);
+  csv(
+    in => \@queue,
+    out => $csv_fn,
+    headers => [
+      'UniqueDocId',
+      'PDFFileName',
+      'RecipientName1',
+      'RecipientName2',
+      'RecipientAddr1',
+      'RecipientAddr2',
+      'RecipientCity',
+      'RecipientState',
+      'RecipientZip',
+      'SenderName1',
+      'SenderName2',
+      'SenderAddr1',
+      'SenderAddr2',
+      'SenderCity',
+      'SenderState',
+      'SenderZip',
+      'PageCount',
+      'MailType',
+      'CoverSheet',
+      'Duplex',
+      'Ink',
+      'Paper',
+      'Return Envelope',
+      'Affidavit'
+    ]);
 
   my @pdfs = uniq(map {
-    $$_{PDFFileName}
+    $$_{path_to_pdf}
   } @queue);
 
   my $zip = Archive::Zip->new();
 
-  $zip->addFile($csv_fn, basename($csv_fn));
+  $zip->addFile($csv_fn, basename($csv_fn) . '.csv');
 
   foreach my $pdf (@pdfs) {
     $zip->addFile($pdf, basename($pdf))
@@ -160,12 +190,16 @@ sub get_auth_fields {
   my ($self) = @_;
 
   my $uniqid = time() . sprintf("%03d", int(rand(1000)));
-  my $hash = md5_hex(encode_base64(substr($uniqid, -6) . $self->{args}->{api_key} . substr($uniqid, 0, 6)));
+
+  my $base64 = encode_base64(substr($uniqid, -6) . $self->{args}->{api_key} . substr($uniqid, 0, 6));
+  chop($base64);
+
+  my $md5 = md5_hex($base64);
 
   my $fields = {
     a => $self->{args}->{api_id},
-    h => $hash,
-    u => $uniqid,
+    h => $md5,
+    t => $uniqid,
     responseformat => 'json'
   };
 
@@ -190,4 +224,4 @@ sub send_request {
     : $self->{error_cb}->($res->decoded_content)
 }
 
-1;
+1
