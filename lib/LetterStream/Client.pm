@@ -45,12 +45,9 @@ sub new {
       }
 
       if(ref $$args{queue} eq 'HASH') {
-        croak "No \$queue->{table} provided." unless $$args{queue}->{table};
-        croak "No \$queue->{source} provided." unless ref $$args{queue}->{source} eq 'ARRAY';
-
-        $$attribs{dbh} = DBI->connect(@{ $$args{queue}->{source} });
-
-        init_queue($$attribs{dbh}, $$args{queue}->{table})
+        foreach my $cb (qw(add_cb count_cb clear_cb filesize_cb get_cb)) {
+          croak "No \$queue->{$cb} provided." unless ref $$args{queue}->{$cb} eq 'CODE'
+        }
       }
       else {
         croak "Missing queue options."
@@ -58,12 +55,40 @@ sub new {
 
       if($$args{mode}->{send_on} eq 'interval') {
         foreach my $cb (qw(success_cb error_cb)) {
-          croak "Missing queue $cb." unless $$args{$cb};
-          croak "Invalid queue $cb." unless ref $$args{$cb} eq 'CODE'
+          croak "Missing queue sent $cb." unless $$args{$cb};
+          croak "Invalid queue sent $cb." unless ref $$args{$cb} eq 'CODE'
         }
       }
     }
-    elsif($$args{mode}->{send_on} ne 'letter_created') {
+    elsif($$args{mode}->{send_on} eq 'letter_created') {
+      $$attribs{letter_queue} = [];
+      $$attribs{queue_filesize} = 0;
+
+      $$args{queue}->{add_cb} = sub {
+        my $letter = shift;
+
+        push @{ $$attribs{letter_queue} }, $letter;
+        $$attribs{queue_filesize} += -s $$letter{PDFFileName}
+      };
+
+      $$args{queue}->{clear_cb} = sub {
+        $$attribs{letter_queue} = [];
+        $$attribs{queue_filesize} = 0
+      };
+
+      $$args{queue}->{get_cb} = sub {
+        return @{ $$attribs{letter_queue} }
+      };
+
+      $$args{queue}->{count_cb} = sub {
+        return scalar @{ $$attribs{letter_queue} }
+      };
+
+      $$args{queue}->{filesize_cb} = sub {
+        return $$attribs{queue_filesize}
+      }
+    }
+    else {
       croak "Invalid \$mode->{send_on}."
     }
   }
@@ -76,8 +101,6 @@ sub new {
   my $self = bless $attribs, $class;
 
   $$self{args} = { %$args };
-  $$self{letter_queue} = [];
-  $$self{queue_filesize} = 0;
   $$self{ua} = LWP::UserAgent->new;
 
   if($$args{mode}->{send_on} eq 'interval') {
@@ -117,7 +140,7 @@ sub create_letter {
 sub add_to_queue {
   my ($self, $letter) = @_;
 
-  push @{ $self->{letter_queue} }, $letter;
+  $self->{args}->{queue}->{add_cb}->($letter);
 
   if($self->{args}->{mode}->{send_on} eq 'letter_created') {
     return $self->send_queue();
@@ -128,11 +151,10 @@ sub add_to_queue {
     $self->{loop}->run
   }
   elsif($self->{args}->{mode}->{send_on} eq 'filecount_limit') {
-    $self->send_queue() if scalar @{ $self->{letter_queue} } >= $self->{args}->{mode}->{value}
+    $self->send_queue() if scalar @{ $self->{args}->{queue}->{count_cb}->() } >= $self->{args}->{mode}->{value}
   }
   elsif($self->{args}->{mode}->{send_on} eq 'filesize_limit') {
-    $self->{queue_filesize} += -s $$letter{PDFFileName};
-    $self->send_queue() if $self->{queue_filesize} > $self->{args}->{mode}->{value};
+    $self->send_queue() if $self->{args}->{queue}->{filesize_cb}->() > $self->{args}->{mode}->{value};
   }
 }
 
@@ -142,8 +164,8 @@ sub send_queue {
   my ($csv_fh, $csv_fn) = tempfile();
   my ($zip_fh, $zip_fn) = tempfile();
 
-  my @queue = @{ $self->{letter_queue} };
-  $self->{letter_queue} = [];
+  my @queue = $self->{args}->{queue}->{get_cb}->();
+  $self->{args}->{queue}->{clear_cb}->();
 
   csv(
     in => \@queue,
@@ -237,37 +259,6 @@ sub send_request {
   return $self->{args}->{mode}->{send_on} eq 'letter_created'
     ? croak $res->decoded_content
     : $self->{error_cb}->($res->decoded_content)
-}
-
-sub table_exists {
-  my ($dbh, $table) = @_;
-
-  my $sth;
-
-  return 0 unless $sth = $self->dbh->prepare("SELECT * FROM " . $table . " LIMIT 1;");
-  return 0 unless $sth->execute();
-
-  return 1
-}
-
-sub get_sql_autoincrement {
-  my $source = shift;
-
-	return 'INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT' if $source =~ /^DBI:mysql:/i;
-	return 'INTEGER PRIMARY KEY' if $source =~ /^DBI:SQLite:/i;
-	return 'INTEGER PRIMARY KEY' if $source =~ /^DBI:SQLite2:/i;
-
-  croak "Invalid \$queue->{source}"
-}
-
-sub init_queue {
-  my ($dbh, $table) = @_;
-
-  if(!table_exists($table)) {
-    my $sth = $dbh->prepare(qq/CREATE TABLE $table (
-      
-      )/)
-  }
 }
 
 1
