@@ -10,6 +10,3 @@ requires 'JSON::MaybeXS';
 requires 'File::Basename';
 requires 'LWP::UserAgent';
 requires 'HTTP::Request::Common';
-
-requires 'IO::Async::Loop';
-requires 'IO::Async::Timer::Periodic';

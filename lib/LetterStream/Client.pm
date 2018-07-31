@@ -15,8 +15,6 @@ use File::Temp qw(tempfile);
 use Digest::MD5 qw(md5_hex);
 use HTTP::Request::Common qw(POST);
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
-use IO::Async::Timer::Periodic;
-use IO::Async::Loop;
 
 our $api_base_uri = 'https://secure.letterstream.com/apis/index.php';
 
@@ -29,52 +27,12 @@ sub new {
   croak "Invalid debug value."
     if($$args{debug} && $$args{debug} !~ /^1|2|3$/);
 
-  if(ref $$args{mode} eq 'HASH') {
-    if(!$$args{mode}->{send_on}) {
-      croak "Missing \$mode->{send_on}."
-    }
-    if($$args{mode}->{send_on} =~ /filesize_limit|filecount_limit|interval/) {
-      if(!$$args{mode}->{value}) {
-        croak "Missing \$mode->{value}."
-      }
-      elsif($$args{mode}->{value} !~ /^[0-9]+$/) {
-        croak "Invalid \$mode->{value}."
-      }
-
-      if($$args{mode}->{send_on} eq 'interval') {
-        foreach my $cb (qw(success_cb error_cb)) {
-          croak "Missing queue $cb." unless $$args{$cb};
-          croak "Invalid queue $cb." unless ref $$args{$cb} eq 'CODE'
-        }
-      }
-    }
-    elsif($$args{mode}->{send_on} ne 'letter_created') {
-      croak "Invalid \$mode->{send_on}."
-    }
-  }
-  else {
-    $$args{mode} = {
-      send_on => 'letter_created'
-    }
-  }
-
   my $self = bless {}, $class;
 
   $$self{args} = { %$args };
   $$self{letter_queue} = [];
   $$self{queue_filesize} = 0;
   $$self{ua} = LWP::UserAgent->new;
-
-  if($$args{mode}->{send_on} eq 'interval') {
-    $$self{loop} = IO::Async::Loop->new();
-    
-    $$self{timer} = IO::Async::Timer::Periodic->new(
-      interval => $$args{mode}->{value},
-      on_tick => sub {
-        $self->send_queue()
-      }
-    )
-  }
 
   return $self
 }
@@ -88,7 +46,8 @@ sub create_letter {
 
   foreach my $address_type (qw(Recipient Sender)) {
     foreach my $address_key (qw(Name1 Addr1 City State Zip)) {
-      croak "No '$address_type$address_key' provided." unless $$content{$address_type . $address_key}
+      croak "No '$address_type$address_key' provided."
+        unless $$content{$address_type . $address_key}
     }
   }
 
@@ -103,22 +62,8 @@ sub add_to_queue {
   my ($self, $letter) = @_;
 
   push @{ $self->{letter_queue} }, $letter;
-
-  if($self->{args}->{mode}->{send_on} eq 'letter_created') {
-    return $self->send_queue();
-  }
-  elsif($self->{args}->{mode}->{send_on} eq 'interval') {
-    $self->{timer}->start;
-    $self->{loop}->add($self->{timer});
-    $self->{loop}->run
-  }
-  elsif($self->{args}->{mode}->{send_on} eq 'filecount_limit') {
-    $self->send_queue() if scalar @{ $self->{letter_queue} } >= $self->{args}->{mode}->{value}
-  }
-  elsif($self->{args}->{mode}->{send_on} eq 'filesize_limit') {
-    $self->{queue_filesize} += -s $$letter{PDFFileName};
-    $self->send_queue() if $self->{queue_filesize} > $self->{args}->{mode}->{value};
-  }
+  
+  return @{ $self->{letter_queue} }
 }
 
 sub send_queue {
@@ -213,15 +158,9 @@ sub send_request {
 
   my $res = $self->{ua}->request($req);
 
-  if($res->is_success) {
-    return $self->{args}->{mode}->{send_on} eq 'letter_created'
-      ? (decode_json($res->decoded_content), $res)
-      : $self->{success_cb}->(decode_json($res->decoded_content), $res)
-  }
-
-  return $self->{args}->{mode}->{send_on} eq 'letter_created'
-    ? croak $res->decoded_content
-    : $self->{error_cb}->($res->decoded_content)
+  return $res->is_success
+    ? decode_json($res->decoded_content)
+    : croak $res->status_line, $res->decoded_content
 }
 
 1
