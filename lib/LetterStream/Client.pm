@@ -40,7 +40,7 @@ sub new {
 sub create_letter {
   my ($self, $content) = @_;
 
-  foreach my $key (qw(MailType PageCount PDFFileName)) {
+  foreach my $key (qw(UniqueDocId MailType PageCount PDFFileName)) {
     croak "No '$key' provided." unless $$content{$key}
   }
 
@@ -50,8 +50,7 @@ sub create_letter {
         unless $$content{$address_type . $address_key}
     }
   }
-
-  $$content{UniqueDocId} = time() . sprintf("%03d", int(rand(1000)));
+  
   $$content{path_to_pdf} = $$content{PDFFileName};
   $$content{PDFFileName} = basename($$content{PDFFileName});
 
