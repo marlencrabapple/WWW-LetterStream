@@ -61,7 +61,7 @@ sub add_to_queue {
   my ($self, $letter) = @_;
 
   push @{ $self->{letter_queue} }, $letter;
-  $self->{queue_filesize} += -s $$letter{PDFFileName};
+  $self->{queue_filesize} += -s $$letter{path_to_pdf};
   
   return @{ $self->{letter_queue} }
 }
