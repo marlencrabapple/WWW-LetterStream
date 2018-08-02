@@ -17,6 +17,7 @@ use HTTP::Request::Common qw(POST);
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 
 our $api_base_uri = 'https://secure.letterstream.com/apis/index.php';
+our $ua = LWP::UserAgent->new;
 
 sub new {
   my ($class, $args) = @_;
@@ -32,7 +33,6 @@ sub new {
   $$self{args} = { %$args };
   $$self{letter_queue} = [];
   $$self{queue_filesize} = 0;
-  $$self{ua} = LWP::UserAgent->new;
 
   return $self
 }
@@ -68,6 +68,8 @@ sub add_to_queue {
 
 sub send_queue {
   my ($self) = @_;
+
+  return 0 unless scalar @{ $self->{letter_queue} };
 
   my ($csv_fh, $csv_fn) = tempfile();
   my ($zip_fh, $zip_fn) = tempfile();
@@ -156,7 +158,7 @@ sub get_auth_fields {
 sub send_request {
   my ($self, $req, $args) = @_;
 
-  my $res = $self->{ua}->request($req);
+  my $res = $ua->request($req);
 
   return $res->is_success
     ? decode_json($res->decoded_content)
