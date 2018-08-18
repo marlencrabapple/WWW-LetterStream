@@ -44,6 +44,10 @@ sub create_letter {
     croak "No '$key' provided." unless $$content{$key}
   }
 
+  croak "Letter already in queue." if scalar grep {
+    $$content{UniqueDocId} == $$_{UniqueDocId} 
+  } @{ $$self{letter_queue} };
+
   foreach my $address_type (qw(Recipient Sender)) {
     foreach my $address_key (qw(Name1 Addr1 City State Zip)) {
       croak "No '$address_type$address_key' provided."
