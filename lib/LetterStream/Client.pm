@@ -1,5 +1,7 @@
 package LetterStream::Client;
 
+use v5.28;
+
 use strict;
 use warnings;
 
@@ -20,17 +22,17 @@ our $api_base_uri = 'https://secure.letterstream.com/apis/index.php';
 our $ua = LWP::UserAgent->new;
 
 sub new {
-  my ($class, $args) = @_;
+  my ($class, %args) = @_;
 
-  croak "Missing API ID." unless $$args{api_id};
-  croak "Missing API key." unless $$args{api_key};
+  croak "Missing API ID." unless $args{api_id};
+  croak "Missing API key." unless $args{api_key};
 
   croak "Invalid debug value."
-    if($$args{debug} && $$args{debug} !~ /^1|2|3$/);
+    if($args{debug} && $args{debug} !~ /^1|2|3$/);
 
   my $self = bless {}, $class;
 
-  $$self{args} = { %$args };
+  $$self{args} = \%args;
   $$self{letter_queue} = [];
   $$self{queue_filesize} = 0;
 
@@ -46,7 +48,7 @@ sub create_letter {
 
   croak "Letter already in queue." if scalar grep {
     $$content{UniqueDocId} == $$_{UniqueDocId} 
-  } @{ $$self{letter_queue} };
+  } $$self{letter_queue}->@*;
 
   foreach my $address_type (qw(Recipient Sender)) {
     foreach my $address_key (qw(Name1 Addr1 City State Zip)) {
@@ -64,21 +66,21 @@ sub create_letter {
 sub add_to_queue {
   my ($self, $letter) = @_;
 
-  push @{ $self->{letter_queue} }, $letter;
+  push $self->{letter_queue}->@*, $letter;
   $self->{queue_filesize} += -s $$letter{path_to_pdf};
   
-  return @{ $self->{letter_queue} }
+  return $self->{letter_queue}->@*
 }
 
 sub send_queue {
   my ($self) = @_;
 
-  return 0 unless scalar @{ $self->{letter_queue} };
+  return 0 unless scalar $self->{letter_queue}->@*;
 
   my ($csv_fh, $csv_fn) = tempfile();
   my ($zip_fh, $zip_fn) = tempfile();
 
-  my @queue = @{ $self->{letter_queue} };
+  my @queue = $self->{letter_queue}->@*;
   $self->{letter_queue} = [];
 
   csv(
@@ -115,7 +117,7 @@ sub send_queue {
     $$_{path_to_pdf}
   } @queue);
 
-  my $zip = Archive::Zip->new();
+  my $zip = Archive::Zip->new;
 
   $zip->addFile($csv_fn, basename($csv_fn) . '.csv');
 
@@ -131,8 +133,42 @@ sub send_queue {
     Content_Type => 'form-data',
     Content => [
       multi_file => [ $zip_fn ],
-      %{ $self->get_auth_fields() }
+      $self->get_auth_fields->%*
     ];
+
+  return $self->send_request($req)
+}
+
+sub get_batch_status {
+  my ($self, @ids) = @_;
+  return $self->get_status_for_x('batch', @ids);
+}
+
+sub get_job_status {
+  my ($self, @ids) = @_;
+  return $self->get_status_for_x('job', @ids);
+}
+
+sub get_document_status {
+  my ($self, @ids) = @_;
+  return $self->get_status_for_x('doc', @ids);
+}
+
+sub get_account_status {
+  my ($self, @ids) = @_;
+  return $self->get_status_for_x('account', @ids);
+}
+
+sub get_status_for_x {
+  my ($self, $type, @ids) = @_;
+  
+  croak 'Invalid type.' unless grep { $type eq $_ } qw(batch job doc account);
+  croak "Missing $type ID." unless scalar @ids;
+
+  my $req = POST $api_base_uri, [
+    $self->get_auth_fields->%*,
+    $type . 'status' => join ',', map { uri_escape_utf8($_) } @ids
+  ];
 
   return $self->send_request($req)
 }
@@ -140,21 +176,21 @@ sub send_queue {
 sub get_auth_fields {
   my ($self) = @_;
 
-  my $uniqid = time() . sprintf("%03d", int(rand(1000)));
+  my $uniqid = time . sprintf("%03d", int(rand(1000)));
 
-  my $base64 = encode_base64(substr($uniqid, -6) . $self->{args}->{api_key} . substr($uniqid, 0, 6));
+  my $base64 = encode_base64(substr($uniqid, -6) . $self->{args}{api_key} . substr($uniqid, 0, 6));
   chop($base64);
 
   my $md5 = md5_hex($base64);
 
   my $fields = {
-    a => $self->{args}->{api_id},
+    a => $self->{args}{api_id},
     h => $md5,
     t => $uniqid,
     responseformat => 'json'
   };
 
-  $$fields{debug} = $self->{args}->{debug} if $self->{args}->{debug};
+  $$fields{debug} = $self->{args}{debug} if $self->{args}{debug};
 
   return $fields
 }

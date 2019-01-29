@@ -7,6 +7,7 @@ requires 'MIME::Base64';
 requires 'Archive::Zip';
 requires 'Text::CSV_XS';
 requires 'JSON::MaybeXS';
+requires 'Cpanel::JSON::XS';
 requires 'File::Basename';
 requires 'LWP::UserAgent';
 requires 'HTTP::Request::Common';
