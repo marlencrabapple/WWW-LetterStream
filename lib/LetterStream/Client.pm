@@ -141,22 +141,22 @@ sub send_queue {
 
 sub get_batch_status {
   my ($self, @ids) = @_;
-  return $self->get_status_for_x('batch', @ids);
+  return $self->get_status_for_x('batch', @ids)
 }
 
 sub get_job_status {
   my ($self, @ids) = @_;
-  return $self->get_status_for_x('job', @ids);
+  return $self->get_status_for_x('job', @ids)
 }
 
 sub get_document_status {
   my ($self, @ids) = @_;
-  return $self->get_status_for_x('doc', @ids);
+  return $self->get_status_for_x('doc', @ids)
 }
 
 sub get_account_status {
   my ($self, @ids) = @_;
-  return $self->get_status_for_x('account', @ids);
+  return $self->get_status_for_x('account', @ids)
 }
 
 sub get_status_for_x {
