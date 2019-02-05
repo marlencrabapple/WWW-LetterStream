@@ -5,7 +5,7 @@ use v5.28;
 use strict;
 use warnings;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use Path::Tiny;
 use URI::Escape;
@@ -49,7 +49,7 @@ sub create_letter {
     croak "No '$key' provided." unless $$content{$key}
   }
 
-  croak "Letter already in queue." if scalar grep {
+  croak "Letter already in queue." if any {
     $$content{UniqueDocId} == $$_{UniqueDocId} 
   } $$self{letter_queue}->@*;
 
@@ -165,7 +165,7 @@ sub get_account_status {
 sub get_status_for_x {
   my ($self, $type, @ids) = @_;
   
-  croak 'Invalid type.' unless grep { $type eq $_ } qw(batch job doc account);
+  croak 'Invalid type.' unless any { $type eq $_ } qw(batch job doc account);
   croak "Missing $type ID." unless scalar @ids;
 
   my $req = POST $api_base_uri, [
