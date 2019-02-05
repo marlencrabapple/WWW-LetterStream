@@ -238,11 +238,12 @@ sub send_request {
   my %args = scalar @_ == 1 ? @_->%* : @_;
 
   my $res = $ua->request($req);
-  my $path_obj = path($args{save_as});
 
   if($res->is_success) {
     if($args{save_as}) {
-      path($args{save_as})->spew(
+      my $path_obj = path($args{save_as});
+
+      $path_obj->spew(
         $args{decode_base64} ? decode_base64($res->content) : $res->content
       );
 
