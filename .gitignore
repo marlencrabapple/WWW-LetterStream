@@ -4,3 +4,10 @@
 .perl-version
 local/
 cpanfile.snapshot
+/LetterStream-Client-*
+/.build
+/_build*
+/Build
+MYMETA.*
+!META.json
+/.prove

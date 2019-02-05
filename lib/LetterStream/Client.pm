@@ -5,16 +5,19 @@ use v5.28;
 use strict;
 use warnings;
 
+our $VERSION = '0.01';
+
+use Path::Tiny;
 use URI::Escape;
 use MIME::Base64;
 use JSON::MaybeXS;
 use Carp qw(croak);
 use File::Basename;
 use LWP::UserAgent;
-use List::Util qw(uniq);
 use Text::CSV_XS qw(csv);
 use File::Temp qw(tempfile);
 use Digest::MD5 qw(md5_hex);
+use List::Util qw(uniq any first);
 use HTTP::Request::Common qw(POST);
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 
@@ -77,8 +80,8 @@ sub send_queue {
 
   return 0 unless scalar $self->{letter_queue}->@*;
 
-  my ($csv_fh, $csv_fn) = tempfile();
-  my ($zip_fh, $zip_fn) = tempfile();
+  my ($csv_fh, $csv_fn) = tempfile;
+  my ($zip_fh, $zip_fn) = tempfile;
 
   my @queue = $self->{letter_queue}->@*;
   $self->{letter_queue} = [];
@@ -173,6 +176,41 @@ sub get_status_for_x {
   return $self->send_request($req)
 }
 
+sub get_document_proof {
+  my ($self, $doc_id, $save_as) = @_;
+
+  croak 'Missing document ID.' unless $doc_id;
+  croak 'Missing filename.' unless $save_as;
+
+  my $req = POST $api_base_uri, [
+    $self->get_auth_fields->%*,
+    doc_id => $doc_id,
+    getinfo => 'proof'
+  ];
+
+  return $self->send_request($req, save_as => $save_as, decode_base64 => 1)
+}
+
+sub get_signature {
+  my $self = shift;
+  my %args = scalar @_ == 1 ? @_->%* : @_;
+
+  croak 'Missing document or tracking ID.'
+    unless any { /^doc_id|cert$/ } keys %args;
+
+  croak 'Missing filename.' unless $args{save_as};
+
+  my $key = first { /^doc_id|cert$/ } keys %args;
+
+  my $req = POST $api_base_uri, [
+    $self->get_auth_fields->%*,
+    $key => $args{$key},
+    getinfo => 'sig'
+  ];
+
+  return $self->send_request($req, save_as => $args{save_as})
+}
+
 sub get_auth_fields {
   my ($self) = @_;
 
@@ -196,13 +234,60 @@ sub get_auth_fields {
 }
 
 sub send_request {
-  my ($self, $req, $args) = @_;
+  my ($self, $req) = @_;
+  my %args = scalar @_ == 1 ? @_->%* : @_;
 
   my $res = $ua->request($req);
+  my $path_obj = path($args{save_as});
 
-  return $res->is_success
-    ? decode_json($res->decoded_content)
-    : croak $res->status_line, $res->decoded_content
+  if($res->is_success) {
+    if($args{save_as}) {
+      path($args{save_as})->spew(
+        $args{decode_base64} ? decode_base64($res->content) : $res->content
+      );
+
+      return $path_obj
+    }
+    else {
+      return decode_json($res->decoded_content)
+    }
+  }
+  else {
+    croak $res->status_line, $res->decoded_content
+  }
 }
 
 1
+
+__END__
+
+=encoding utf-8
+
+=head1 NAME
+
+LetterStream::Client - Blah blah blah
+
+=head1 SYNOPSIS
+
+  use LetterStream::Client;
+
+=head1 DESCRIPTION
+
+LetterStream::Client is
+
+=head1 AUTHOR
+
+Ian P Bradley E<lt>ian.bradley@studiocrabapple.comE<gt>
+
+=head1 COPYRIGHT
+
+Copyright 2019- Ian P Bradley
+
+=head1 LICENSE
+
+This library is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+=cut

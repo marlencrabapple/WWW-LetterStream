@@ -1,4 +1,5 @@
 requires 'Carp';
+requires 'Path::Tiny';
 requires 'File::Temp';
 requires 'List::Util';
 requires 'Digest::MD5';
@@ -11,3 +12,7 @@ requires 'Cpanel::JSON::XS';
 requires 'File::Basename';
 requires 'LWP::UserAgent';
 requires 'HTTP::Request::Common';
+
+on test => sub {
+    requires 'Test::More', '0.96';
+};
