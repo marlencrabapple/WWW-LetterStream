@@ -2,6 +2,9 @@ Revision history for LetterStream-Client
 
 {{$NEXT}}
 
+0.03  2019-02-05 15:52:00 PST
+        - Only create Path::Tiny object in send_request if save_as arg is defined
+
 0.02  2019-02-05 09:54:52 PST
         - Change out grep for List::Util's any in a couple of places for short circuiting
 
