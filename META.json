@@ -37,7 +37,21 @@
       },
       "runtime" : {
          "requires" : {
-            "perl" : "5.008005"
+            "Archive::Zip" : "0",
+            "Carp" : "0",
+            "Cpanel::JSON::XS" : "0",
+            "Digest::MD5" : "0",
+            "File::Basename" : "0",
+            "File::Temp" : "0",
+            "HTTP::Request::Common" : "0",
+            "JSON::MaybeXS" : "0",
+            "LWP::UserAgent" : "0",
+            "List::Util" : "0",
+            "MIME::Base64" : "0",
+            "Path::Tiny" : "0",
+            "Text::CSV_XS" : "0",
+            "URI::Escape" : "0",
+            "perl" : "v5.28.1"
          }
       },
       "test" : {

@@ -1,3 +1,5 @@
+requires 'perl', '5.28.1';
+
 requires 'Carp';
 requires 'Path::Tiny';
 requires 'File::Temp';
