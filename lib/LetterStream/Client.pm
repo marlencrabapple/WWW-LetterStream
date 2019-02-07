@@ -5,7 +5,7 @@ use v5.28;
 use strict;
 use warnings;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use Path::Tiny;
 use URI::Escape;
@@ -192,8 +192,7 @@ sub get_document_proof {
 }
 
 sub get_signature {
-  my $self = shift;
-  my %args = scalar @_ == 1 ? @_->%* : @_;
+  my ($self, %args) = @_;
 
   croak 'Missing document or tracking ID.'
     unless any { /^doc_id|cert$/ } keys %args;
@@ -234,8 +233,7 @@ sub get_auth_fields {
 }
 
 sub send_request {
-  my ($self, $req) = @_;
-  my %args = scalar @_ == 1 ? @_->%* : @_;
+  my ($self, $req, %args) = @_;
 
   my $res = $ua->request($req);
 
