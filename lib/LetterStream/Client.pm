@@ -5,7 +5,7 @@ use v5.28;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use Path::Tiny;
 use URI::Escape;
@@ -31,7 +31,7 @@ sub new {
   croak "Missing API key." unless $args{api_key};
 
   croak "Invalid debug value."
-    if($args{debug} && $args{debug} !~ /^1|2|3$/);
+    if($args{debug} && $args{debug} !~ /^(?:1|2|3)$/);
 
   my $self = bless {}, $class;
 
@@ -195,11 +195,11 @@ sub get_signature {
   my ($self, %args) = @_;
 
   croak 'Missing document or tracking ID.'
-    unless any { /^doc_id|cert$/ } keys %args;
+    unless any { /^(?:doc_id|cert)$/ } keys %args;
 
   croak 'Missing filename.' unless $args{save_as};
 
-  my $key = first { /^doc_id|cert$/ } keys %args;
+  my $key = first { /^(?:doc_id|cert)$/ } keys %args;
 
   my $req = POST $api_base_uri, [
     $self->get_auth_fields->%*,

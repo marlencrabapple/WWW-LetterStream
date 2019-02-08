@@ -11,3 +11,4 @@ cpanfile.snapshot
 MYMETA.*
 !META.json
 /.prove
+.vscode
