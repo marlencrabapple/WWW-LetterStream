@@ -11,9 +11,9 @@ use Path::Tiny;
 use URI::Escape;
 use MIME::Base64;
 use JSON::MaybeXS;
-use Carp qw(croak);
 use File::Basename;
 use LWP::UserAgent;
+use Carp qw(carp croak);
 use Text::CSV_XS qw(csv);
 use File::Temp qw(tempfile);
 use Digest::MD5 qw(md5_hex);
@@ -49,9 +49,16 @@ sub create_letter {
     croak "No '$key' provided." unless $$content{$key}
   }
 
-  croak "Letter already in queue." if any {
+  my $dupe = any {
     $$content{UniqueDocId} == $$_{UniqueDocId} 
   } $$self{letter_queue}->@*;
+
+  if($dupe) {
+    carp "Letter already in queue.";
+    return ()
+  }
+
+  croak "File '$$content{PDFFileName}' not found." unless -e $$content{PDFFileName};
 
   foreach my $address_type (qw(Recipient Sender)) {
     foreach my $address_key (qw(Name1 Addr1 City State Zip)) {
