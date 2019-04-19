@@ -195,7 +195,7 @@ sub get_document_proof {
     getinfo => 'proof'
   ];
 
-  return $self->send_request($req, save_as => $save_as, decode_base64 => 1)
+  return $self->send_request($req, save_as => $save_as, decode_base64 => 1, validate_pdf => 1)
 }
 
 sub get_signature {
@@ -214,7 +214,7 @@ sub get_signature {
     getinfo => 'sig'
   ];
 
-  return $self->send_request($req, save_as => $args{save_as})
+  return $self->send_request($req, save_as => $args{save_as}, validate_pdf => 1)
 }
 
 sub get_auth_fields {
@@ -248,9 +248,12 @@ sub send_request {
     if($args{save_as}) {
       my $path_obj = path($args{save_as});
 
-      $path_obj->spew(
-        $args{decode_base64} ? decode_base64($res->content) : $res->content
-      );
+      my $data = $args{decode_base64} ? decode_base64($res->content) : $res->content;
+      
+      croak "Probably not a valid PDF."
+        if $args{validate_pdf} && $data !~ /^\%PDF\-1\./;
+
+      $path_obj->spew_raw($data);
 
       return $path_obj
     }
