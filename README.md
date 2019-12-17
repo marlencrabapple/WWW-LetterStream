@@ -1,14 +1,14 @@
 # NAME
 
-LetterStream::Client - Blah blah blah
+WWW::LetterStream - Blah blah blah
 
 # SYNOPSIS
 
-    use LetterStream::Client;
+    use WWW::LetterStream;
 
 # DESCRIPTION
 
-LetterStream::Client is
+WWW::LetterStream is
 
 # AUTHOR
 

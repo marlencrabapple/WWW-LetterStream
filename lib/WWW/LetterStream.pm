@@ -1,4 +1,4 @@
-package LetterStream::Client;
+package WWW::LetterStream;
 
 use v5.28;
 

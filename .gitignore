@@ -4,7 +4,7 @@
 .perl-version
 local/
 cpanfile.snapshot
-/LetterStream-Client-*
+/WWW-LetterStream-*
 /.build
 /_build*
 /Build
@@ -12,3 +12,4 @@ MYMETA.*
 !META.json
 /.prove
 .vscode
+.pdf
